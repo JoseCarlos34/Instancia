@@ -1,4 +1,3 @@
-cat > server.js <<'EOF'
 require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
@@ -83,6 +82,5 @@ app.get('/recomendacion/:usuario_id', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-console.log(`Servidor corriendo en http://localhost:${PORT}`);
-
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
