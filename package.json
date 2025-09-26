@@ -1,0 +1,27 @@
+{
+  "name": "apuestas",
+  "version": "1.0.0",
+  "description": "��#\u0000 \u0000I\u0000n\u0000s\u0000t\u0000a\u0000n\u0000c\u0000i\u0000a\u0000\r\u0000 \u0000#\u0000 \u0000I\u0000n\u0000s\u0000t\u0000a\u0000n\u0000c\u0000i\u0000a\u00002\u0000\r\u0000 \u0000",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "mysql2": "^3.15.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JoseCarlos34/Instancia.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JoseCarlos34/Instancia/issues"
+  },
+  "homepage": "https://github.com/JoseCarlos34/Instancia#readme"
+}
