@@ -3,84 +3,130 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
+const path = require('path'); // 👈 importante
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
+// Servir archivos estáticos (index.js, CSS, imágenes, etc.)
+app.use(express.static(path.join(__dirname)));
+
+// Ruta raíz -> index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Ruta raíz
-app.get('/', (req, res) => {
-  res.send('Servidor activo ✅ Usa /register, /login, /ranking, /partidos...');
-});
+// Configuración DB
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASS || '',
+  database: process.env.DB_NAME || 'apuestas_db'
+};
+
+const pool = mysql.createPool(dbConfig);
 
 // Registro de usuario
 app.post('/register', async (req, res) => {
   const { nombre, correo, contrasena } = req.body;
-  if (!nombre || !correo || !contrasena) return res.status(400).json({ error: 'Faltan datos' });
 
-  const [users] = await pool.query('SELECT id FROM usuarios WHERE correo = ?', [correo]);
-  if (users.length > 0) return res.status(400).json({ error: 'Correo ya registrado' });
+  if (!nombre || !correo || !contrasena) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
 
-  const hash = await bcrypt.hash(contrasena, 10);
-  await pool.query('INSERT INTO usuarios (nombre, correo, contrasena) VALUES (?, ?, ?)', [nombre, correo, hash]);
+  try {
+    const [existingUser] = await pool.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'El correo ya está registrado' });
+    }
 
-  res.json({ message: 'Usuario registrado exitosamente' });
+    const hashedPassword = await bcrypt.hash(contrasena, 10);
+
+    await pool.query(
+      'INSERT INTO usuarios (nombre, correo, contrasena) VALUES (?, ?, ?)',
+      [nombre, correo, hashedPassword]
+    );
+
+    res.json({ message: 'Usuario registrado exitosamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Login
+// Login de usuario
 app.post('/login', async (req, res) => {
   const { correo, contrasena } = req.body;
-  if (!correo || !contrasena) return res.status(400).json({ error: 'Faltan datos' });
 
-  const [users] = await pool.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
-  if (users.length === 0) return res.status(400).json({ error: 'Credenciales inválidas' });
+  if (!correo || !contrasena) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
 
-  const user = users[0];
-  const valid = await bcrypt.compare(contrasena, user.contrasena);
-  if (!valid) return res.status(400).json({ error: 'Credenciales inválidas' });
+  try {
+    const [rows] = await pool.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Correo o contraseña incorrectos' });
+    }
 
-  res.json({ message: 'Login exitoso', usuario: { id: user.id, nombre: user.nombre } });
+    const user = rows[0];
+    const match = await bcrypt.compare(contrasena, user.contrasena);
+    if (!match) {
+      return res.status(400).json({ error: 'Correo o contraseña incorrectos' });
+    }
+
+    res.json({ message: 'Login exitoso', usuario: { id: user.id, nombre: user.nombre, correo: user.correo } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Ranking
+// Obtener ranking de equipos
 app.get('/ranking', async (req, res) => {
-  const [rows] = await pool.query('SELECT id, nombre, liga, ranking FROM equipos ORDER BY ranking ASC');
-  res.json(rows);
+  try {
+    const [rows] = await pool.query('SELECT * FROM equipos ORDER BY ranking ASC');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Partidos
+// Obtener partidos
 app.get('/partidos', async (req, res) => {
-  const [rows] = await pool.query(`
-    SELECT p.id, p.fecha, el.nombre AS equipo_local, ev.nombre AS equipo_visitante
-    FROM partidos p
-    JOIN equipos el ON p.equipo_local_id = el.id
-    JOIN equipos ev ON p.equipo_visitante_id = ev.id
-    ORDER BY p.fecha ASC
-  `);
-  res.json(rows);
+  try {
+    const [rows] = await pool.query(`
+      SELECT p.id, p.fecha, 
+             el.nombre AS equipo_local, ev.nombre AS equipo_visitante
+      FROM partidos p
+      JOIN equipos el ON p.equipo_local_id = el.id
+      JOIN equipos ev ON p.equipo_visitante_id = ev.id
+      ORDER BY p.fecha ASC
+    `);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Recomendaciones por usuario
+// Recomendaciones según preferencias del usuario
 app.get('/recomendacion/:usuario_id', async (req, res) => {
   const userId = req.params.usuario_id;
-  const [rows] = await pool.query(`
-    SELECT e.id, e.nombre, e.liga, e.ranking
-    FROM preferencias p
-    JOIN equipos e ON p.equipo_id = e.id
-    WHERE p.usuario_id = ?
-    ORDER BY e.ranking ASC
-  `, [userId]);
-  res.json(rows);
+  try {
+    const [rows] = await pool.query(`
+      SELECT e.*
+      FROM equipos e
+      JOIN preferencias p ON e.id = p.equipo_id
+      WHERE p.usuario_id = ?
+      ORDER BY e.ranking ASC
+    `, [userId]);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
